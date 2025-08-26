@@ -1,6 +1,7 @@
 # 在app.py文件顶部添加
 import os
 import json
+import logging  # 添加这一行
 from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
@@ -69,13 +70,8 @@ def _cache_set(key, value, ttl_sec=None):
     ttl = ttl_sec if ttl_sec is not None else config.cache_ttl_seconds
     _CACHE[key] = (time.time() + ttl, value)
 
-# 在文件顶部添加
-import logging
-from logging.handlers import RotatingFileHandler
-import os
-
 # 配置日志
-log_dir = '/var/log/app'
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 if not os.path.exists(log_dir):
     os.makedirs(log_dir, exist_ok=True)
 

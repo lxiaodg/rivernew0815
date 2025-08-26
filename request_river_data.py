@@ -57,7 +57,7 @@ from logging.handlers import RotatingFileHandler
 import os
 
 # 配置日志
-log_dir = '/var/log/app'
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 if not os.path.exists(log_dir):
     os.makedirs(log_dir, exist_ok=True)
 
