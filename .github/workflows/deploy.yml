@@ -29,5 +29,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
       - name: Build Docker image
-        run: docker build -t riverdataapp .
+        run: |
+          # 设置 Docker Hub 用户名和镜像名称
+          DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
+          IMAGE_NAME="riverdataapp"
+          # 获取当前日期时间作为版本标签的一部分
+          VERSION_TAG="$(date +'%Y%m%d%H%M%S')"
+          # 构建镜像并添加多个标签
+          docker build -t $DOCKER_HUB_USERNAME/$IMAGE_NAME:latest -t $DOCKER_HUB_USERNAME/$IMAGE_NAME:$VERSION_TAG .
+      - name: Push Docker image to Docker Hub
+        run: |
+          # 推送镜像到 Docker Hub
+          DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
+          IMAGE_NAME="riverdataapp"
+          # 推送 latest 和版本标签
+          docker push $DOCKER_HUB_USERNAME/$IMAGE_NAME:latest
+          # 获取版本标签并推送
+          VERSION_TAG="$(date +'%Y%m%d%H%M%S')"
+          docker push $DOCKER_HUB_USERNAME/$IMAGE_NAME:$VERSION_TAG
