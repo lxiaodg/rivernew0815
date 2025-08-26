@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>河流水文数据分析系统</title>
+    <style>
+        body {
+            font-family: "SimHei", "WenQuanYi Micro Hei", "Heiti TC", "Microsoft YaHei", sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        select, button, input {
+            padding: 8px;
+            font-size: 16px;
+        }
+        #plot-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+        }
+        .date-filter {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>河流水文数据分析系统</h1>
+    
+    <div class="form-group">
+        <label for="river">河流名称:</label>
+        <select id="river" onchange="updateStations()">
+            <option value="">请选择河流</option>
+            {% for river in rivers %}
+            <option value="{{ river }}">{{ river }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label for="station">站点名称:</label>
+        <select id="station">
+            <option value="">请先选择河流</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label for="plot-type">图表类型:</label>
+        <select id="plot-type">
+            <option value="level">水位曲线</option>
+            <option value="flow">流量曲线</option>
+            <option value="both">水位和流量双曲线</option>
+        </select>
+    </div>
+    
+    <div class="date-filter">
+        <h3>日期范围筛选</h3>
+        <div class="form-group">
+            <label for="start-date">开始日期:</label>
+            <input type="date" id="start-date">
+        </div>
+        <div class="form-group">
+            <label for="end-date">结束日期:</label>
+            <input type="date" id="end-date">
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <button onclick="generatePlot()">生成图表</button>
+        <button onclick="renderTimeseries()">渲染时序(ECharts)</button>
+        <!-- 添加统一查询按钮 -->
+        <button onclick="queryAllData()">查询</button>
+    </div>
+    
+    <div id="plot-container">
+        <img id="plot-image" src="" alt="水文数据图表">
+    </div>
+    
+    <div id="echarts-container" style="width:100%;height:480px;margin-top:16px;"></div>
+    
+    <!-- 季节分析部分 -->
+    <div class="seasonal-analysis" style="margin-top: 30px;">
+        <h2>季节分析</h2>
+        <div class="form-group">
+            <label for="years">分析年数:</label>
+            <input type="number" id="years" min="1" max="10" value="3">
+        </div>
+        <div class="form-group">
+            <button onclick="seasonalAnalysis()">执行季节分析</button>
+        </div>
+        
+        <div id="seasonal-result">
+            <!-- 分析结果将动态显示在这里 -->
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script>
+        function updateStations() {
+            const riverName = document.getElementById('river').value;
+            const stationSelect = document.getElementById('station');
+            
+            if (!riverName) {
+                stationSelect.innerHTML = '<option value="">请先选择河流</option>';
+                return;
+            }
+            
+            fetch('/get_stations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ river_name: riverName }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(stations => {
+                // 清空当前选项
+                stationSelect.innerHTML = '';
+                // 添加默认选项
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = '请选择站点';
+                stationSelect.appendChild(defaultOption);
+                // 添加站点选项
+                stations.forEach(station => {
+                    const option = document.createElement('option');
+                    option.value = station;
+                    option.textContent = station;
+                    stationSelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('获取站点列表时出错:', error);
+                // 显示错误信息
+                stationSelect.innerHTML = '<option value="">获取站点失败</option>';
+            });
+        }
+        
+        function generatePlot() {
+            const riverName = document.getElementById('river').value;
+            const stationName = document.getElementById('station').value;
+            const plotType = document.getElementById('plot-type').value;
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (!riverName || !stationName) {
+                alert('请选择河流和站点');
+                return;
+            }
+            
+            fetch('/plot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    river_name: riverName,
+                    station_name: stationName,
+                    plot_type: plotType,
+                    start_date: startDate,
+                    end_date: endDate
+                }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw err; });
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('plot-image').src = 'data:image/png;base64,' + data.image;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('生成图表失败: ' + (error.error || '未知错误'));
+            });
+        }
+        
+        function renderTimeseries() {
+            const riverName = document.getElementById('river').value;
+            const stationName = document.getElementById('station').value;
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+
+            if (!riverName || !stationName) {
+                alert('请选择河流和站点');
+                return;
+            }
+
+            fetch('/timeseries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    river_name: riverName,
+                    station_name: stationName,
+                    start_date: startDate,
+                    end_date: endDate
+                }),
+            })
+            .then(r => { if (!r.ok) return r.json().then(e=>{throw e}); return r.json(); })
+            .then(data => {
+                const el = document.getElementById('echarts-container');
+                const chart = echarts.init(el);
+                const ds = data.dates;
+                const level = data.levels;
+                const flow = data.flows;
+                const option = {
+                    title: { text: `${data.river_name} - ${data.station_name} 时序`, left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    toolbox: { feature: { saveAsImage: {} } },
+                    legend: { data: ['水位(m)', '流量(m³/s)'], top: 24 },
+                    xAxis: { type: 'category', data: ds },
+                    yAxis: [
+                        { type: 'value', name: '水位(m)', position: 'left' },
+                        { type: 'value', name: '流量(m³/s)', position: 'right' }
+                    ],
+                    dataZoom: [
+                        { type: 'inside' },
+                        { type: 'slider' }
+                    ],
+                    series: [
+                        { name: '水位(m)', type: 'line', yAxisIndex: 0, showSymbol: false, data: level },
+                        { name: '流量(m³/s)', type: 'line', yAxisIndex: 1, showSymbol: false, data: flow }
+                    ]
+                };
+                chart.setOption(option);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('加载时序失败: ' + (error.error || '未知错误'));
+            });
+        }
+        
+        // 添加统一查询函数
+        function queryAllData() {
+        // 设置默认分析年数为3年
+        document.getElementById('years').value = 3;
+        
+        // 先渲染时序图
+        renderTimeseries();
+        
+        // 再执行季节分析
+        seasonalAnalysis();
+        }
+        
+        // 修改seasonalAnalysis函数，使其默认使用3年数据
+        function seasonalAnalysis() {
+            const riverName = document.getElementById('river').value;
+            const stationName = document.getElementById('station').value;
+            // 确保使用3年数据
+            const years = '3';
+            
+            if (!riverName || !stationName) {
+                alert('请选择河流和站点');
+                return;
+            }
+            
+            fetch('/seasonal_analysis', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    river_name: riverName,
+                    station_name: stationName,
+                    years: years
+                }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw err; });
+                }
+                return response.json();
+            })
+            .then(data => {
+                displaySeasonalResult(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('季节分析失败: ' + (error.error || '未知错误'));
+            });
+        }
+        
+        function displaySeasonalResult(data) {
+            const resultDiv = document.getElementById('seasonal-result');
+            
+            if (data.error) {
+                resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                return;
+            }
+            
+            let html = `
+                <h3>${data.river_name} - ${data.station_name} 近${data.years}年季节性分析</h3>
+                <p><strong>分析时段:</strong> ${data.start_date} 至 ${data.end_date}</p>
+                <p><strong>有效数据点:</strong> ${data.valid_data_count}个</p>
+                
+                <h4>季节平均数据</h4>
+                <table border="1" cellpadding="8" style="border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <th>季节</th>
+                        <th>平均水位(m)</th>
+                        <th>平均流量(m³/s)</th>
+                    </tr>
+            `;
+            
+            // 按春夏秋冬顺序显示
+            const seasonsOrder = ["春季", "夏季", "秋季", "冬季"];
+            seasonsOrder.forEach(season => {
+                if (data.seasonal_data[season]) {
+                    html += `
+                        <tr>
+                            <td>${season}</td>
+                            <td>${data.seasonal_data[season].avg_level}</td>
+                            <td>${data.seasonal_data[season].avg_flow}</td>
+                        </tr>
+                    `;
+                }
+            });
+            
+            html += `</table>`;
+            
+            // 年际变化趋势
+            if (data.yearly_trends && data.yearly_trends.length > 0) {
+                html += `
+                    <h4>年际变化趋势</h4>
+                    <table border="1" cellpadding="8" style="border-collapse: collapse;">
+                        <tr>
+                            <th>年份</th>
+                            <th>平均水位(m)</th>
+                            <th>水位变化</th>
+                            <th>平均流量(m³/s)</th>
+                            <th>流量变化</th>
+                        </tr>
+                `;
+                
+                data.yearly_trends.forEach(trend => {
+                    html += `
+                        <tr>
+                            <td>${trend.year}</td>
+                            <td>${trend.avg_level}</td>
+                            <td>${trend.level_change || '-'}</td>
+                            <td>${trend.avg_flow}</td>
+                            <td>${trend.flow_change || '-'}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `</table>`;
+            }
+            
+            resultDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

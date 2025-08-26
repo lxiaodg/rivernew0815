@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    container_name: riverapp_web
+    ports:
+      - "5001:5001"
+    env_file:
+      - .env
+    volumes:
+      - ./river_data:/app/river_data
+      - ./templates:/app/templates
+      - ./river_data.db:/app/river_data.db
+      - app_logs:/var/log/app
+    restart: unless-stopped
+    # 将第18行的健康检查配置修改为：
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5001/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cron:
+    build: .
+    container_name: riverapp_cron
+    command: ["sh", "-c", "echo '0 12 * * * cd /app && python request_river_data.py >> /var/log/app/cron.log 2>&1' | crontab - && cron -f"]
+    env_file:
+      - .env
+    volumes:
+      - ./river_data:/app/river_data
+      - app_logs:/var/log/app
+    restart: unless-stopped
+    depends_on:
+      - web
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app_logs:
+
+
