@@ -35,3 +35,5 @@ Thumbs.db
 # Docker
 .docker/
 .dockerignore
+# 排除数据文件
+river_data/
