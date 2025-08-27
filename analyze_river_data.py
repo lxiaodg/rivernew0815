@@ -585,9 +585,22 @@ class RiverDataAnalyzer:
 logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
-    # 仅在直接运行本文件时，输出字体提示并启用交互式分析
-    logging.basicConfig(level=logging.INFO)
-    print(FONT_HINT)
-    analyzer = RiverDataAnalyzer()
-    analyzer.load_data()
-    analyzer.interactive_analysis()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='河流数据分析工具')
+    parser.add_argument('--init-db', action='store_true', help='初始化数据库')
+    
+    args = parser.parse_args()
+    
+    if args.init_db:
+        # 初始化数据库
+        analyzer = RiverDataAnalyzer()
+        analyzer.init_database()
+        print("数据库初始化完成")
+    else:
+        # 默认行为：交互式分析
+        logging.basicConfig(level=logging.INFO)
+        print(FONT_HINT)
+        analyzer = RiverDataAnalyzer()
+        analyzer.load_data()
+        analyzer.interactive_analysis()

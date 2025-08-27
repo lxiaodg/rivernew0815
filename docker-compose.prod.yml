@@ -3,7 +3,7 @@ version: "3.9"
 services:
   riverapp:
     image: ${DOCKER_HUB_USERNAME:-yourusername}/riverdataapp:latest
-    container_name: riverapp
+    container_name: riverapp_prod
     ports:
       - "5001:5001"
     environment:
@@ -11,6 +11,7 @@ services:
       - DB_PATH=/app/river_data.db
       - PORT=5001
       - TZ=Asia/Shanghai
+      - CACHE_TTL_SECONDS=3600
     volumes:
       - river_data:/app/river_data
       - river_db:/app/river_data.db
@@ -25,8 +26,16 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
 
 volumes:
   river_data:
@@ -35,5 +44,3 @@ volumes:
     driver: local
   app_logs:
     driver: local
-
-

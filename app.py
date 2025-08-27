@@ -1,14 +1,12 @@
-# 在app.py文件顶部添加
 import os
 import json
-import logging  # 添加这一行
+import logging
 from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
 
-# 添加这两行
 from flask import Flask, render_template, jsonify, request
-app = Flask(__name__)
+from logging.handlers import RotatingFileHandler
 
 # 验证宋体可用性
 from matplotlib import font_manager

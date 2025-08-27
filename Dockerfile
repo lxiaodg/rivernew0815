@@ -24,15 +24,27 @@ WORKDIR /app
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PATH="/root/.local/bin:$PATH" \
-    TZ=Asia/Shanghai
+    TZ=Asia/Shanghai \
+    DEBIAN_FRONTEND=noninteractive
 
 # 安装运行时依赖和中文字体
 RUN apt-get update && \ 
-    apt-get install -y --no-install-recommends cron tzdata && \ 
-    # 安装中文字体支持
-    apt-get install -y --no-install-recommends fonts-wqy-zenhei fonts-wqy-microhei && \ 
-    rm -rf /var/lib/apt/lists/* && \ 
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+    apt-get install -y --no-install-recommends \
+        cron \
+        tzdata \
+        curl \
+        fonts-wqy-zenhei \
+        fonts-wqy-microhei \
+        fonts-noto-cjk \
+        && \ 
+    # 配置字体缓存
+    fc-cache -fv && \
+    # 清理缓存
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    # 设置时区
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
 
 # 从构建阶段复制依赖
 COPY --from=builder /root/.local /root/.local
@@ -40,12 +52,15 @@ COPY --from=builder /root/.local /root/.local
 # 复制应用代码
 COPY . .
 
-# 创建日志目录
-RUN mkdir -p /var/log/app
+# 创建必要的目录
+RUN mkdir -p /var/log/app /app/river_data /app/logs
+
+# 设置权限
+RUN chmod +x /app/start.sh
 
 EXPOSE 5001
 
-# 默认启动Web服务（使用Gunicorn）
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5001", "--timeout", "300", "--log-level", "info", "app:app"]
+# 使用启动脚本
+CMD ["/app/start.sh"]
 
 

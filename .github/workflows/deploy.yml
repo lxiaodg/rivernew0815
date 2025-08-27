@@ -1,54 +1,102 @@
-name: Deploy River Data Analysis App
+name: Build and Deploy River Data Analysis App
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: riverdataapp
+
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+          
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Test application
+          
+      - name: Run tests
         run: |
-          # 这里可以添加测试命令，如单元测试等
-          echo "Testing completed"
+          python -c "import app, analyze_river_data, request_river_data, config; print('✅ 所有模块导入成功')"
+          echo "测试完成"
 
-  docker-build:
-    needs: build-and-test
+  build-and-push:
+    needs: test
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/'))
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
+          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      - name: Generate version tag
-        id: generate_tag
-        run: echo "VERSION_TAG=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_ENV
-      - name: Build Docker image
+          
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Image digest
+        run: echo ${{ steps.meta.outputs.tags }}
+
+  deploy-notification:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Notify deployment
         run: |
-          # 设置 Docker Hub 用户名和镜像名称
-          DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
-          IMAGE_NAME="riverdataapp"
-          # 构建镜像并添加多个标签
-          docker build -t $DOCKER_HUB_USERNAME/$IMAGE_NAME:latest -t $DOCKER_HUB_USERNAME/$IMAGE_NAME:$VERSION_TAG .
-      - name: Push Docker image to Docker Hub
-        run: |
-          # 推送镜像到 Docker Hub
-          DOCKER_HUB_USERNAME=${{ secrets.DOCKER_HUB_USERNAME }}
-          IMAGE_NAME="riverdataapp"
-          # 推送 latest 和版本标签
-          docker push $DOCKER_HUB_USERNAME/$IMAGE_NAME:latest
-          docker push $DOCKER_HUB_USERNAME/$IMAGE_NAME:$VERSION_TAG
+          echo "🚀 应用已成功部署到 Docker Hub"
+          echo "镜像: ${{ secrets.DOCKER_HUB_USERNAME }}/riverdataapp:latest"
+          echo "部署命令:"
+          echo "docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/riverdataapp:latest"
+          echo "docker run -d -p 5001:5001 --name riverapp ${{ secrets.DOCKER_HUB_USERNAME }}/riverdataapp:latest"

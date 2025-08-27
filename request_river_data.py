@@ -143,13 +143,48 @@ def sync_to_latest(refresh_cookie_on_fail: bool = True) -> dict:
     return {"success": success_count, "fail": fail_count}
 
 def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='河流数据同步工具')
+    parser.add_argument('--check-update', action='store_true', help='检查数据是否需要更新')
+    parser.add_argument('--sync', action='store_true', help='同步数据到最新')
+    parser.add_argument('--init-db', action='store_true', help='初始化数据库')
+    
+    args = parser.parse_args()
+    
     try:
-        result = sync_to_latest(refresh_cookie_on_fail=True)
-        print(f"数据下载完成！成功: {result['success']}, 失败: {result['fail']}")
+        if args.check_update:
+            # 检查数据是否需要更新
+            last_date = find_last_downloaded_date(config.data_dir)
+            current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            days_behind = (current_date - last_date).days
+            
+            if days_behind > 0:
+                print(f"数据落后 {days_behind} 天，需要更新")
+                result = sync_to_latest(refresh_cookie_on_fail=True)
+                print(f"数据更新完成！成功: {result['success']}, 失败: {result['fail']}")
+            else:
+                print("数据已是最新")
+        elif args.sync:
+            # 同步数据
+            result = sync_to_latest(refresh_cookie_on_fail=True)
+            print(f"数据同步完成！成功: {result['success']}, 失败: {result['fail']}")
+        elif args.init_db:
+            # 初始化数据库
+            from analyze_river_data import RiverDataAnalyzer
+            analyzer = RiverDataAnalyzer(data_dir=config.data_dir, db_path=config.db_path)
+            analyzer.init_database()
+            print("数据库初始化完成")
+        else:
+            # 默认行为：同步数据
+            result = sync_to_latest(refresh_cookie_on_fail=True)
+            print(f"数据下载完成！成功: {result['success']}, 失败: {result['fail']}")
     except KeyboardInterrupt:
         print('程序被用户中断')
     except Exception as e:
         print(f'发生未知错误: {e}')
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == '__main__':
